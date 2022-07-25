@@ -22,24 +22,14 @@ VMID=$3
 SECONDARY=${SECONDARY_STORAGE:-`pwd`}
 
 
-#echo "PHASE: $1"
-#echo "MODE: $2"
-#echo "VMID: $3"
-#echo "VMTYPE: $VMTYPE"
-#echo "DUMPDIR: $DUMPDIR"
-#echo "HOSTNAME: $HOSTNAME"
-#echo "TARFILE: $TARFILE"
-#echo "TARBASENAME: $TARBASENAME"
-#echo "LOGFILE: $LOGFILE"
-#echo "USER: `whoami`"
-#echo "SECONDARY: $SECONDARY"
-
 if [ ! -d "$SECONDARY" ] ; then
   echo "Missing secondary storage path $SECONDARY. Got >$SECONDARY_STORAGE< from config file."
   exit 12
 fi
 
 if [ "$1" == "backup-end" ]; then
+  echo "Backing up $VMTYPE $3"
+
   if [ ! -f $TARFILE ] ; then
     echo "Where is my tarfile?"
     exit 3
@@ -105,25 +95,46 @@ if [ "$1" == "backup-end" ]; then
   fi
 
   echo "REMOVING older remote backups."
-  DELIMITER="//" # safe since B2 does not allow double slash in filenames
-  ALLFILES=$(set -e;next="$B2_PATH" ; while [ "$next" != "null" ] ; do echo "Getting more files starting at: $next" 1>&2; OUT=$(b2 list_file_names "$B2_BUCKET" "$next") ; next=$(echo "$OUT" | jq -r ".nextFileName") ; files=$(echo "$OUT" | jq -r '.files[]|.fileName+"'$DELIMITER'"+.fileId'); echo "$files"; done)
-  VMIDFILES=$(echo -n "$ALLFILES" |grep "vzdump-qemu-$VMID")
-  echo -n $(echo "$VMIDFILES" | wc -l)
-  echo " Files from backups with VMID $VMID:"
-  echo "$VMIDFILES"
-  OTHERVMIDFILES=$(echo -n "$VMIDFILES" | grep -v "$TARBASENAME")
-  OTHERVMIDFILESCOUNT=$(echo "$OTHERVMIDFILES" | wc -l)
-  echo "$OTHERVMIDFILESCOUNT Files from backups with VMID $VMID but not from current backup $TARBASENAME:"
-  echo "$OTHERVMIDFILES"
-  echo "Will delete $OTHERVMIDFILESCOUNT files from older backups."
-  COMMANDS=$(echo -n "$OTHERVMIDFILES" | sed -E 's#^(.+)//(.+)$#'$B2_BINARY' delete_file_version \1 \2#')
-  echo "$COMMANDS" | tr '\n' '\0' | xargs -0 -n1 -I % bash -c "%"
-  if [ $? -ne 0 ] ; then
-    echo "Something went wrong deleting old remote backups."
-    exit 11
-  fi
+  # Base64 to avoid issues with spaces
+  # https://www.starkandwayne.com/blog/bash-for-loop-over-json-array-using-jq/
+  ALLFILES=$(b2 ls "$B2_BUCKET" "$B2_PATH" --recursive --json | jq -r '.[] | @base64')
+  FILESARR=()
+  TODELETEARR=()
+
+  # Looping multiple times is not great, but I'm not that good at Bash
+  for FILEJSON in $ALLFILES; do
+    TMPVARFN=`echo $FILEJSON | base64 --decode | jq -r '.fileName'`
+
+    if [[ $TMPVARFN =~ vzdump-.+-$VMID ]]; then
+      FILESARR+=( $FILEJSON )
+      if [[ ! $TMPVARFN =~ "$TARBASENAME" ]]; then
+        TODELETEARR+=( $FILEJSON )
+      fi
+    fi
+  done
+
+  echo "${#FILESARR[@]} files from backups with VMID $VMID:"
+  for FILESARRFILE in ${FILESARR[@]}; do
+    echo $FILESARRFILE | base64 --decode | jq -r '.fileName'
+  done
+
+  echo "${#TODELETEARR[@]} files from backups with VMID $VMID but not from current backup $TARBASENAME:"
+  for TODELETEFILE in ${TODELETEARR[@]}; do
+    echo $TODELETEFILE | base64 --decode | jq -r '.fileName'
+  done
+  echo "Will delete ${#TODELETEARR[@]} files from older backups."
+
+  for O in ${TODELETEARR[@]}; do
+    TODELFILENAME=`echo $O | base64 --decode | jq -r '.fileName'`
+    TODELFILEID=`echo $O | base64 --decode | jq -r '.fileId'`
+    echo "Deleting $TODELFILENAME ($TODELFILEID)"
+    $B2_BINARY delete_file_version $TODELFILENAME $TODELFILEID
+    if [ $? -ne 0 ] ; then
+      echo "Something went wrong deleting old remote backups."
+      exit 11
+    fi
+  done
 
   echo "DELETING local encrypted splits"
   rm $TARFILE.split.*.gpg
-    
 fi

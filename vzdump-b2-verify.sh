@@ -9,8 +9,8 @@ if [ ! -r "$CONFIG_FILE" ] ; then
   echo "If it is somewhere else, change the second line of this script."
   exit 1
 fi
-if [ ! -x "$GPG_BINARY" ] || [ ! -x "$B2_BINARY" ] || [ ! -x "$JQ_BINARY" ] || [ ! -r "$GPG_PASSPHRASE_FILE" ] ; then
-  echo "Missing one of $GPG_BINARY, $B2_BINARY, $JQ_BINARY or $GPG_PASSPHRASE_FILE."
+if [ ! -x "$GPG_BINARY" ] || [ ! -x "$B2_BINARY" ] || [ ! -x "$JQ_BINARY" ] || [ ! -x "$BASENAME_BINARY" ] || [ ! -r "$GPG_PASSPHRASE_FILE" ] ; then
+  echo "Missing one of $GPG_BINARY, $B2_BINARY, $JQ_BINARY, $BASENAME_BINARY or $GPG_PASSPHRASE_FILE."
   echo "Or one of the binaries is not executable."
   exit 2
 fi
@@ -18,9 +18,9 @@ fi
 if [ $# -lt 3 ] ; then
   echo "Please call me with three parameters."
   echo "a) The directory inside the bucket, e.g. 'hostname/rpool/backup/dump',"
-  echo "b) The name of the (compressed) vma-file, e.g. 'vzdump-qemu-100-2016_02_11-12_15_02.vma.lzo' and"
-  echo "c) a directory where I can work."
-  echo "vzdump-b2-verify.sh hostname/rpool/backup/dump vzdump-qemu-100-2016_02_11-12_15_02.vma.lzo /rpool/backup/restoretest"
+  echo "b) The name of the (compressed) vma-file, e.g. 'vzdump-qemu-100-2016_02_11-12_15_02' and"
+  echo "c) a directory where I can work. This directory must be empty."
+  echo "vzdump-b2-verify.sh hostname/rpool/backup/dump vzdump-qemu-100-2016_02_11-12_15_02 /rpool/backup/restoretest"
   exit 3
 fi
 
@@ -29,7 +29,12 @@ FILENAME=$2
 DIR=$3
 
 if [ ! -d "$DIR" ] ; then
-  echo "Can's find $DIR or it is not a directory. Please create it."
+  echo "Can't find $DIR or it is not a directory. Please create it."
+  exit 4
+fi
+
+if [ ! -z "$(ls -A $DIR)" ]; then
+  echo "$DIR must be empty."
   exit 4
 fi
 
@@ -41,8 +46,14 @@ if [ $? -ne 0 ] ; then
 fi
 
 echo "LISTING ALL THE FILES"
-B2_FILENAMES=$($B2_BINARY list_file_names $B2_BUCKET "$B2_PATH/$FILENAME" 1000)
-B2_FILTERED=$(echo "$B2_FILENAMES" | $JQ_BINARY --arg fn "$FILENAME" --arg b2binary "$B2_BINARY" --arg localdir "$DIR" --arg bucket "$B2_BUCKET" '.files[]|select(.fileName|test(".*/"+$fn+".*"))|""+$b2binary+" download_file_by_name "+$bucket+" "+.fileName+" "+$localdir+"/"+(.fileName|capture("^.*/(?<basename>.+)$")|.basename)')
+B2_FILENAMES=$($B2_BINARY ls $B2_BUCKET "$B2_PATH")
+B2_FILTERED=()
+
+for B2_FILE_TMP in $B2_FILENAMES; do
+  if [[ $B2_FILE_TMP =~ "$FILENAME" ]]; then
+    B2_FILTERED+=( $B2_FILE_TMP )
+  fi
+done
 
 if [ -z "$B2_FILTERED" ] ; then
   echo "No files after filtering. Result from B2 was:\n$B2_FILENAMES"
@@ -50,13 +61,16 @@ if [ -z "$B2_FILTERED" ] ; then
 fi
 
 echo "DOWNLOADING ALL THE FILES"
-xargs -n 1 -L 1 -r -P $NUM_PARALLEL_UPLOADS --verbose -I % bash -c "%" <<< "$B2_FILTERED"
-if [ $? -ne 0 ] ; then
-  echo "Something went wrong downloading the files."
-  exit 6
-fi
+for B2_DL_FILE in ${B2_FILTERED[@]}; do
+  B2_DL_FILE_NAME=`$BASENAME_BINARY $B2_DL_FILE`
+  $B2_BINARY download-file-by-name $B2_BUCKET $B2_DL_FILE $DIR/$B2_DL_FILE_NAME
+  if [ $? -ne 0 ] ; then
+    echo "Something went wrong downloading the files."
+    exit 6
+  fi
+done
 
-SHA="$DIR/$FILENAME.sha1sums"
+SHA="$DIR/$FILENAME.*.sha1sums"
 echo "CHECKING encrypted split sums"
 sed -r "s/ .*\/(.+)/  \1/g" < $SHA | grep "gpg$" | bash -c "cd $DIR;sha1sum -c -"
 if [ $? -ne 0 ] ; then
@@ -67,11 +81,15 @@ fi
 echo "OK: encrypted split sums"
 
 echo "DECRYPTING"
-ls -1 "$DIR/$FILENAME.split."*.gpg | xargs -n 1 -L 1 -r -I % -P $NUM_PARALLEL_GPG $GPG_BINARY --batch --passphrase-file $GPG_PASSPHRASE_FILE "%"
-if [ $? -ne 0 ] ; then
-  echo "Decrypting failed."
-  exit 8
-fi
+FILES_TO_DECRYPT=`ls -1 "$DIR/" | grep "$FILENAME" | grep ".gpg"`
+for FILE_TO_DECRYPT in $FILES_TO_DECRYPT; do
+  FILE_TO_DECRYPT_OUT=`echo $FILE_TO_DECRYPT | sed 's/\.gpg$//g'`
+  $GPG_BINARY --batch --decrypt --output "$DIR/$FILE_TO_DECRYPT_OUT" --passphrase-file $GPG_PASSPHRASE_FILE "$DIR/$FILE_TO_DECRYPT"
+  if [ $? -ne 0 ] ; then
+    echo "Decrypting failed."
+    exit 8
+  fi
+done
 
 echo "CHECKING decrypted split sums"
 sed -r "s/ .*\/(.+)/  \1/g" < $SHA | egrep ".split.[0-9]+$" | bash -c "cd $DIR;sha1sum -c -"
@@ -81,22 +99,30 @@ if [ $? -ne 0 ] ; then
 fi
 
 echo "DELETING encrypted splits"
-ls -1 "$DIR/$FILENAME.split."*.gpg | xargs rm
+ENCR_FILES_TO_DEL=`ls -1 "$DIR/" | grep "$FILENAME" | grep ".gpg"`
+for ENCR_FILE_TO_DEL in $ENCR_FILES_TO_DEL; do
+  rm "$DIR/$ENCR_FILE_TO_DEL"
+done
 
 echo "JOINING splits"
-cat "$DIR/$FILENAME.split."* > "$DIR/$FILENAME"
-if [ $? -ne 0 ] ; then
-  echo "Joining failed."
-  exit 10
-fi
+FILES_TO_JOIN=`ls -1 "$DIR/" | grep "$FILENAME" | grep ".split."`
+for FILE_TO_JOIN in $FILES_TO_JOIN; do
+  FILE_TO_JOIN_EXT=`echo ${FILE_TO_JOIN#*.} | sed -r 's/\.split\.[0-9]+//'`
+  cat "$DIR/$FILE_TO_JOIN" >> "$DIR/$FILENAME.$FILE_TO_JOIN_EXT"
+  if [ $? -ne 0 ] ; then
+    echo "Joining failed."
+    exit 10
+  fi
+done
 
 echo "CHECKING original file"
-sed -r "s/ .*\/(.+)/  \1/g" < $SHA | egrep ".vma.(lzo|gz|bz2)$" | bash -c "cd $DIR;sha1sum -c -"
+sed -r "s/ .*\/(.+)/  \1/g" < $SHA | egrep ".(lzo|gz|tgz|zst)$" | bash -c "cd $DIR;sha1sum -c -"
 if [ $? -ne 0 ] ; then
   echo "Original file did not successfully verify."
   exit 11
 fi
 
 echo "DELETING decrypted splits"
-rm "$DIR/$FILENAME.split."*
-
+for FILE_TO_JOIN in $FILES_TO_JOIN; do
+  rm "$DIR/$FILE_TO_JOIN"
+done

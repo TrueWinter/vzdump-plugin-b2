@@ -16,3 +16,4 @@ SECONDARY_STORAGE=
 GPG_BINARY=/usr/bin/gpg
 B2_BINARY=/usr/local/bin/b2
 JQ_BINARY=/usr/local/bin/jq
+BASENAME_BINARY=/usr/bin/basename

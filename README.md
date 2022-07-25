@@ -19,50 +19,60 @@ storage devices for VMs and backup is a good idea.
 
 ## Preparation
 
-1. Get a Backblaze account and generate an application key along with a bucket.
-1. Install git and download this repository:
+- Get a Backblaze account and generate an application key along with a bucket.
+- Install git and download this repository:
 
-     ```
-     apt-get install -y git
-     git clone https://github.com/padelt/vzdump-plugin-b2.git /usr/local/bin/vzdump-plugin-b2
-     ```
+  ```
+  apt-get install -y git
+  git clone https://github.com/TrueWinter/vzdump-plugin-b2.git /usr/local/bin/vzdump-plugin-b2
+  ```
 
-   Alternatively transfer it manually to the server.
-1. Provide a *recent* version of [jq](https://stedolan.github.io/jq/download/):
+  Alternatively transfer it manually to the server.
+- Install jq:
 
-     ```
-     wget -O /usr/local/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64
-     chmod +x /usr/local/bin/jq
-     ```
+  ```
+  apt-get install -y jq
+  ```
 
-1. Make a copy of `upload-b2.config.template` and edit it to your parameters.
-   If you put it anywhere else than the filename `upload-b2.config` in the
-   same directory as `vzdump-plugin-upload-b2.sh`, also edit that script and
-   make `CONFIG_FILE` point to it.
-1. In that config file, note GPG_PASSPHRASE_FILE. That should point to a
-   file containing your long, random and secret passphrase. You can use this
-   do generate one:
+- Make a copy of `upload-b2.config.template` and edit it to your parameters.
+  If you put it anywhere else than the filename `upload-b2.config` in the
+  same directory as `vzdump-plugin-upload-b2.sh`, also edit that script and
+  make `CONFIG_FILE` point to it.
+- In that config file, note GPG_PASSPHRASE_FILE. That should point to a
+  file containing your long, random and secret passphrase. You can use this
+  do generate one:
 
-
-     ```
-     test -r /root/vzdump-passphrase.txt || dd if=/dev/random bs=1 count=48 2>/dev/null | hexdump -v -e '"%02X"' > /root/vzdump-passphrase.txt
-     ```
+  ```
+  test -r /root/vzdump-passphrase.txt || dd if=/dev/random bs=1 count=48 2>/dev/null | hexdump -v -e '"%02X"' > /root/vzdump-passphrase.txt
+  ```
 
    **Remember and save that string** - your backups are unusable without it!
-1. Make `vzdump` aware of the script by adding a line to `/etc/vzdump.conf`:
+- Make `vzdump` aware of the script by adding a line to `/etc/vzdump.conf`:
 
-     ```
-     echo "script: /usr/local/bin/vzdump-plugin-b2/vzdump-plugin-upload-b2.sh" >> /etc/vzdump.conf
-     ```
+  ```
+  echo "script: /usr/local/bin/vzdump-plugin-b2/vzdump-plugin-upload-b2.sh" >> /etc/vzdump.conf
+  ```
 
-1. Make available the `b2` command-line utility as documented [here](https://www.backblaze.com/b2/docs/quick_command_line.html):
+- Download the `b2` command-line utility as documented [here](https://www.backblaze.com/b2/docs/quick_command_line.html):
 
-     ```
-     wget -O /usr/local/bin/b2 https://docs.backblaze.com/public/b2_src_code_bundles/b2
-     chmod +x /usr/local/bin/b2
-     ```
+  ```
+  wget -O /usr/local/bin/b2 https://github.com/Backblaze/B2_Command_Line_Tool/releases/latest/download/b2-linux
+  chmod +x /usr/local/bin/b2
+  ```
+  
+Note that container backups are only a few hundred MB, while VM backups are at least 2.5GB (at least for Ubuntu). For this reason, it is recommended that you use containers wherever possible.
 
 ## Testing
 
 A manual backup of a small VM is a good idea to test general functionality.
 Look at the log output for hints what may have gone wrong.
+
+## Restoring backups
+
+To restore backups, run the `vzdump-b2-verify.sh` script. You will need to pass three parameters:
+
+- The directory inside the bucket, e.g. `hostname/rpool/backup/dump`
+- The name of the (compressed) backup file, e.g. 'vzdump-qemu-100-2016_02_11-12_15_02'
+- A directory where the script can work. This directory must be empty
+
+This script will download the files from Backblaze B2, decrypt them, verify the checksums, and join the split files together.
