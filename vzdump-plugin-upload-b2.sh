@@ -28,9 +28,14 @@ if [ ! -d "$SECONDARY" ] ; then
 fi
 
 if [ "$1" == "backup-end" ]; then
+  # PVE v7 support
+  if [[  -z "$TARFILE" ]] ; then
+        TARFILE="$TARGET"
+  fi
+
   echo "Backing up $VMTYPE $3"
 
-  if [ ! -f $TARFILE ] ; then
+  if [[  -z "$TARFILE" ]] ; then
     echo "Where is my tarfile?"
     exit 3
   fi
