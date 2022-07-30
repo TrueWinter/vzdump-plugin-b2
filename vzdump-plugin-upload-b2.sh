@@ -31,6 +31,7 @@ if [ "$1" == "backup-end" ]; then
   # PVE v7 support
   if [[  -z "$TARFILE" ]] ; then
         TARFILE="$TARGET"
+		TARBASENAME=$(basename "$TARFILE")
   fi
 
   echo "Backing up $VMTYPE $3"
