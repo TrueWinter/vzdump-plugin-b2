@@ -50,7 +50,7 @@ if [ "$1" == "backup-end" ]; then
 
   echo "SPLITTING into chunks sized <=$B2_SPLITSIZE_BYTE byte"
   cd "$DUMPDIR"
-  time split --bytes=$B2_SPLITSIZE_BYTE --suffix-length=3 --numeric-suffixes "$TARBASENAME" "$SECONDARY/$TARBASENAME.split."
+  $TIME_BINARY split --bytes=$B2_SPLITSIZE_BYTE --suffix-length=3 --numeric-suffixes "$TARBASENAME" "$SECONDARY/$TARBASENAME.split."
   if [ $? -ne 0 ] ; then
     echo "Something went wrong splitting."
     exit 5
@@ -69,7 +69,7 @@ if [ "$1" == "backup-end" ]; then
 
   echo "ENCRYPTING"
   cd "$SECONDARY"
-  ls -1 $TARBASENAME.split.* | time xargs --verbose -I % -n 1 -P $NUM_PARALLEL_GPG $GPG_BINARY --batch --no-tty --compress-level 0 --passphrase-file $GPG_PASSPHRASE_FILE -c --output "$DUMPDIR/%.gpg" "%"
+  ls -1 $TARBASENAME.split.* | $TIME_BINARY xargs --verbose -I % -n 1 -P $NUM_PARALLEL_GPG $GPG_BINARY --batch --no-tty --compress-level 0 --passphrase-file $GPG_PASSPHRASE_FILE -c --output "$DUMPDIR/%.gpg" "%"
   if [ $? -ne 0 ] ; then
     echo "Something went wrong encrypting."
     exit 7
