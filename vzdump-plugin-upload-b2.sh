@@ -94,14 +94,14 @@ if [ "$1" == "backup-end" ]; then
   fi
 
   echo "UPLOADING to B2."
-  $NUM_PARALLEL_UPLOADS $B2_BINARY upload_file $B2_BUCKET "$TARFILE.sha1sums" "$B2_PATH/$TARFILE.sha1sums"
+  $NUM_PARALLEL_UPLOADS $B2_BINARY upload_file $B2_BUCKET "$TARFILE.sha1sums" "$B2_PATH$TARFILE.sha1sums"
   if [ $? -ne 0 ] ; then
     echo "Something went wrong uploading."
     exit 10
   fi
 
   for TOUPLOADFILE in "$TARFILE.split.*"; do
-    $NUM_PARALLEL_UPLOADS $B2_BINARY upload_file $B2_BUCKET "$TOUPLOADFILE" "$B2_PATH/$TOUPLOADFILE"
+    $NUM_PARALLEL_UPLOADS $B2_BINARY upload_file $B2_BUCKET "$TOUPLOADFILE" "$B2_PATH$TOUPLOADFILE"
 	if [ $? -ne 0 ] ; then
       echo "Something went wrong uploading."
       exit 10
