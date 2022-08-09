@@ -2,13 +2,11 @@
 
 This plugin to `vzdump` will hook into after a single VM backup is done.
 It will 
-- split the `.vma.lzo` file that `vzdump` wrote to chunks of configurable size
-  (default is 2 GB, B2 allows up to 5 GB=5*10^9 byte)
+- split the `.vma.lzo` file that `vzdump` wrote to chunks of configurable size (default is 2 GB, B2 allows up to 5 GB=5*10^9 byte)
 - encrypt them using a symmetric key (password - no GPG keys used),
-- upload them to Backblaze B2 to a configurable path (default: hostname)
-  under a configurable bucket in parallel,
+- upload them to Backblaze B2 to a configurable path (default: hostname) under a configurable bucket,
 - delete the local copy of the backup and
-- remove all remote backups at B2 except the one it just uploaded.
+- remove all remote backups at B2 for the VM/LXC except the one it just uploaded.
 
 Every step is checksummed and the checksum file is uploaded as well.
 
@@ -64,8 +62,7 @@ Note that container backups are only a few hundred MB, while VM backups are at l
 
 ## Testing
 
-A manual backup of a small VM is a good idea to test general functionality.
-Look at the log output for hints what may have gone wrong.
+A manual backup of a small VM is a good idea to test general functionality. Look at the log output for hints what may have gone wrong.
 
 ## Restoring backups
 

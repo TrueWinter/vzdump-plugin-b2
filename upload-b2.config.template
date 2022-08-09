@@ -6,7 +6,6 @@ B2_APPLICATION_KEY=CHANGEME_TO_YOUR_APPLICATION_KEY
 # B2 allowes up to 5*10^9 Byte/file
 B2_SPLITSIZE_BYTE=2000000000
 B2_PATH=`hostname`
-NUM_PARALLEL_UPLOADS=10
 NUM_PARALLEL_GPG=6
 # Secondary storage is where the unencrypted split files are stored temporarally.
 # If empty, this defaults to the dump dir.
