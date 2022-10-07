@@ -93,21 +93,47 @@ if [ "$1" == "backup-end" ]; then
     exit 9
   fi
 
-  echo "UPLOADING to B2."
-  $B2_BINARY upload_file $B2_BUCKET "$TARFILE.sha1sums" "$B2_PATH$TARFILE.sha1sums"
-  if [ $? -ne 0 ] ; then
-    echo "Something went wrong uploading."
-    exit 10
-  fi
-
-  TOUPLOADFILES=`ls -1 $TARFILE.split.*`
-  for TOUPLOADFILE in $TOUPLOADFILES; do
-    $B2_BINARY upload_file $B2_BUCKET "$TOUPLOADFILE" "$B2_PATH$TOUPLOADFILE"
+  # Backblaze expects scripts to retry when an error occurs
+  # https://www.backblaze.com/blog/b2-503-500-server-error/
+  SHA_UPLOAD_RETRIES=0
+  sha_upload() {
+	echo "UPLOADING to B2."
+	$B2_BINARY upload_file $B2_BUCKET "$TARFILE.sha1sums" "$B2_PATH$TARFILE.sha1sums"
 	if [ $? -ne 0 ] ; then
-      echo "Something went wrong uploading."
-      exit 10
-    fi
-  done
+		((SHA_UPLOAD_RETRIES++))
+		if [[ "$SHA_UPLOAD_RETRIES" -eq 3 ]]; then
+			echo "Something went wrong uploading."
+			exit 10
+		else
+			echo "Something went wrong while uploading, retrying."
+			sleep 5
+			sha_upload
+		fi
+	fi
+  }
+
+  sha_upload
+
+  BACKUP_UPLOAD_RETRIES=0
+  upload_backups() {
+	TOUPLOADFILES=`ls -1 $TARFILE.split.*`
+	for TOUPLOADFILE in $TOUPLOADFILES; do
+		$B2_BINARY upload_file $B2_BUCKET "$TOUPLOADFILE" "$B2_PATH$TOUPLOADFILE"
+		if [ $? -ne 0 ] ; then
+			((BACKUP_UPLOAD_RETRIES++))
+			if [[ "$BACKUP_UPLOAD_RETRIES" -eq 3 ]]; then
+				echo "Something went wrong uploading."
+				exit 10
+			else
+				echo "Something went wrong while uploading, retrying."
+				sleep 5
+				upload_backups
+			fi
+		fi
+	done
+  }
+
+  upload_backups
 
   echo "REMOVING older remote backups."
   # Base64 to avoid issues with spaces
