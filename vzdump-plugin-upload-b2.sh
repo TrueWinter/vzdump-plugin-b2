@@ -101,12 +101,13 @@ if [ "$1" == "backup-end" ]; then
 	$B2_BINARY upload_file $B2_BUCKET "$TARFILE.sha1sums" "$B2_PATH$TARFILE.sha1sums"
 	if [ $? -ne 0 ] ; then
 		((SHA_UPLOAD_RETRIES++))
-		if [[ "$SHA_UPLOAD_RETRIES" -eq 3 ]]; then
+		# 5 retries will allow a sleep time of 69 seconds
+		if [[ "$SHA_UPLOAD_RETRIES" -eq 5 ]]; then
 			echo "Something went wrong uploading."
 			exit 10
 		else
 			echo "Something went wrong while uploading, retrying."
-			sleep 5
+			sleep $(( 2**$SHA_UPLOAD_RETRIES + 5))
 			sha_upload
 		fi
 	fi
@@ -121,12 +122,12 @@ if [ "$1" == "backup-end" ]; then
 		$B2_BINARY upload_file $B2_BUCKET "$TOUPLOADFILE" "$B2_PATH$TOUPLOADFILE"
 		if [ $? -ne 0 ] ; then
 			((BACKUP_UPLOAD_RETRIES++))
-			if [[ "$BACKUP_UPLOAD_RETRIES" -eq 3 ]]; then
+			if [[ "$BACKUP_UPLOAD_RETRIES" -eq 5 ]]; then
 				echo "Something went wrong uploading."
 				exit 10
 			else
 				echo "Something went wrong while uploading, retrying."
-				sleep 5
+				sleep $(( 2**$BACKUP_UPLOAD_RETRIES + 5))
 				upload_backups
 			fi
 		fi
