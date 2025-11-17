@@ -39,14 +39,14 @@ if [ ! -z "$(ls -A $DIR)" ]; then
 fi
 
 echo "AUTHORIZING AGAINST B2"
-$B2_BINARY authorize_account $B2_ACCOUNT_ID $B2_APPLICATION_KEY
+$B2_BINARY account authorize $B2_ACCOUNT_ID $B2_APPLICATION_KEY
 if [ $? -ne 0 ] ; then
   echo "Something went wrong authorizing."
   exit 5
 fi
 
 echo "LISTING ALL THE FILES"
-B2_FILENAMES=$($B2_BINARY ls $B2_BUCKET "$B2_PATH")
+B2_FILENAMES=$($B2_BINARY ls "b2://$B2_BUCKET/$B2_PATH")
 B2_FILTERED=()
 
 for B2_FILE_TMP in $B2_FILENAMES; do

@@ -87,7 +87,7 @@ if [ "$1" == "backup-end" ]; then
   rm $SECONDARY/$TARBASENAME.split.???
 
   echo "AUTHORIZING AGAINST B2"
-  $B2_BINARY authorize_account $B2_ACCOUNT_ID $B2_APPLICATION_KEY
+  $B2_BINARY account authorize $B2_ACCOUNT_ID $B2_APPLICATION_KEY
   if [ $? -ne 0 ] ; then
     echo "Something went wrong authorizing."
     exit 9
@@ -98,7 +98,7 @@ if [ "$1" == "backup-end" ]; then
   SHA_UPLOAD_RETRIES=0
   sha_upload() {
 	echo "UPLOADING to B2."
-	$B2_BINARY upload_file $B2_BUCKET "$TARFILE.sha1sums" "$B2_PATH$TARFILE.sha1sums"
+	$B2_BINARY file upload $B2_BUCKET "$TARFILE.sha1sums" "$B2_PATH$TARFILE.sha1sums"
 	if [ $? -ne 0 ] ; then
 		((SHA_UPLOAD_RETRIES++))
 		# 5 retries will allow a sleep time of 69 seconds
@@ -119,7 +119,7 @@ if [ "$1" == "backup-end" ]; then
   upload_backups() {
 	TOUPLOADFILES=`ls -1 $TARFILE.split.*`
 	for TOUPLOADFILE in $TOUPLOADFILES; do
-		$B2_BINARY upload_file $B2_BUCKET "$TOUPLOADFILE" "$B2_PATH$TOUPLOADFILE"
+		$B2_BINARY file upload $B2_BUCKET "$TOUPLOADFILE" "$B2_PATH$TOUPLOADFILE"
 		if [ $? -ne 0 ] ; then
 			((BACKUP_UPLOAD_RETRIES++))
 			if [[ "$BACKUP_UPLOAD_RETRIES" -eq 5 ]]; then
@@ -139,7 +139,7 @@ if [ "$1" == "backup-end" ]; then
   echo "REMOVING older remote backups."
   # Base64 to avoid issues with spaces
   # https://www.starkandwayne.com/blog/bash-for-loop-over-json-array-using-jq/
-  ALLFILES=$(b2 ls "$B2_BUCKET" "$B2_PATH" --recursive --json | jq -r '.[] | @base64')
+  ALLFILES=$(b2 ls "b2://$B2_BUCKET/$B2_PATH" --recursive --json | jq -r '.[] | @base64')
   FILESARR=()
   TODELETEARR=()
 
@@ -170,7 +170,7 @@ if [ "$1" == "backup-end" ]; then
     TODELFILENAME=`echo $O | base64 --decode | jq -r '.fileName'`
     TODELFILEID=`echo $O | base64 --decode | jq -r '.fileId'`
     echo "Deleting $TODELFILENAME ($TODELFILEID)"
-    $B2_BINARY delete_file_version $TODELFILENAME $TODELFILEID
+    $B2_BINARY rm "b2id://$TODELFILEID"
     if [ $? -ne 0 ] ; then
       echo "Something went wrong deleting old remote backups."
       exit 11
