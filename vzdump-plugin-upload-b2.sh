@@ -21,6 +21,12 @@ TARBASENAME=$(basename "$TARFILE")
 VMID=$3
 SECONDARY=${SECONDARY_STORAGE:-`pwd`}
 
+if [ ! -z "${RESTRICT_STORE_ID}" ]; then
+  if [ "$RESTRICT_STORE_ID" != "$STOREID" ]; then
+    exit 0;
+  fi
+fi
+
 
 if [ ! -d "$SECONDARY" ] ; then
   echo "Missing secondary storage path $SECONDARY. Got >$SECONDARY_STORAGE< from config file."

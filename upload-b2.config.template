@@ -11,6 +11,8 @@ NUM_PARALLEL_GPG=6
 # If empty, this defaults to the dump dir.
 # This is useful if your dump directory cannot hold two copies of the backup.
 SECONDARY_STORAGE=
+# If set, ignore all backups that do not have the same storage ID
+RESTRICT_STORE_ID=
 
 GPG_BINARY=/usr/bin/gpg
 B2_BINARY=/usr/local/bin/b2
